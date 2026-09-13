@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1, viewport-fit=cover"
+    >
+    <meta name="theme-color" content="#0f6b7a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Paciente">
+    <meta
+        name="description"
+        content="App privada de paciente para autorizaciones, acuses y control consentido de reposo."
+    >
+    <meta
+        http-equiv="Content-Security-Policy"
+        content="default-src 'self'; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; img-src 'self' data:; media-src 'self' blob:; style-src 'self'; script-src 'self'; base-uri 'self'; form-action 'self'"
+    >
+    <title>App Paciente</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<main id="appShell" class="app-shell patient-shell auth-locked">
+    <aside class="sidebar">
+        <div class="brand">
+            <span class="brand-logo"><img src="icons/icon.jpeg" alt=""></span>
+            <div>
+                <strong>App Paciente</strong>
+                <small>Autorizaciones y reposo</small>
+            </div>
+        </div>
+
+        <div class="privacy-note">
+            <strong>Canal paciente</strong>
+            <span>Esta app no muestra el dashboard del controlador. Solo envia autorizaciones, acuses y eventos consentidos a la API.</span>
+        </div>
+    </aside>
+
+    <section class="workspace">
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">APP PACIENTE PRIVADA</p>
+                <h1 id="pageTitle">Autorizaciones y reposo</h1>
+            </div>
+            <div id="networkStatus" class="network-status" aria-live="polite"></div>
+        </header>
+
+        <section id="biometricGate" class="biometric-gate panel">
+            <div class="biometric-mark">ID</div>
+            <div>
+                <p class="eyebrow">ACCESO SEGURO</p>
+                <h2>Desbloquear App de Paciente</h2>
+                <p id="biometricStatus">
+                    Use la huella digital, Face ID o bloqueo biometrico configurado en el telefono.
+                </p>
+            </div>
+            <button id="unlockBiometric" class="primary" type="button">Abrir con huella digital</button>
+        </section>
+
+        <section id="deviceRegistration" class="device-registration panel">
+            <div>
+                <p class="eyebrow">INSCRIPCION DE TELEFONO</p>
+                <h2>Vincular dispositivo del paciente</h2>
+                <p>
+                    Este telefono no esta inscrito en la tabla demo <strong>user_devices</strong>.
+                    Registre un usuario ficticio para habilitar autorizaciones, documentos y control de reposo.
+                </p>
+            </div>
+            <form id="deviceForm" class="device-form">
+                <label>
+                    Usuario paciente
+                    <select id="deviceUser">
+                        <option value="101">Jaime Kriman - 12.345.678-9</option>
+                        <option value="102">Marta Contreras - 12.540.919-8</option>
+                        <option value="103">Sebastian Nunez - 20.112.664-9</option>
+                    </select>
+                </label>
+                <label>
+                    Alias telefono
+                    <input id="deviceAlias" value="Telefono principal" autocomplete="off">
+                </label>
+                <label>
+                    Codigo activacion
+                    <input id="deviceCode" value="123456" inputmode="numeric" autocomplete="one-time-code">
+                </label>
+                <label>
+                    Clave demo
+                    <input id="devicePassword" value="demo123" type="password" autocomplete="current-password">
+                </label>
+                <button class="primary" type="submit">Inscribir telefono</button>
+            </form>
+        </section>
+
+        <section id="patientView" class="view active">
+            <nav class="patient-tabs" aria-label="Modulos de la app paciente">
+                <button class="patient-tab active" type="button" data-patient-panel="healthPanel">
+                    Ficha y servicios
+                </button>
+                <button class="patient-tab" type="button" data-patient-panel="documentsPanel">
+                    Documentos y recibos
+                </button>
+                <button class="patient-tab" type="button" data-patient-panel="restPanel">
+                    Control de reposo
+                </button>
+            </nav>
+
+            <section id="healthPanel" class="patient-panel active">
+                <div class="patient-layout health-layout">
+                    <article class="hero-panel health-hero">
+                        <div>
+                            <p class="eyebrow">APP PACIENTE 8 INTEGRADA</p>
+                            <h2>Ficha clinica y servicios del paciente</h2>
+                            <p>
+                                Cards principales de la app antigua integrados con la nueva capa
+                                de autorizaciones, reposo y dispositivo inscrito.
+                            </p>
+                        </div>
+                        <div class="license-card">
+                            <small>Telefono inscrito</small>
+                            <strong id="deviceAliasLabel">Pendiente</strong>
+                            <span id="deviceUuidLabel">Sin UUID</span>
+                        </div>
+                    </article>
+
+                    <section class="health-card-grid" id="healthCards"></section>
+
+                    <section class="panel services-panel">
+                        <div class="panel-head">
+                            <div>
+                                <p class="eyebrow">MODULOS APP PACIENTE 8</p>
+                                <h3>Accesos de servicios</h3>
+                            </div>
+                        </div>
+                        <div class="service-grid" id="serviceCards"></div>
+                    </section>
+
+                    <section class="panel device-table-panel">
+                        <div class="panel-head">
+                            <div>
+                                <p class="eyebrow">TABLA DEMO</p>
+                                <h3>user_devices</h3>
+                            </div>
+                            <button id="resetDevice" class="link-button" type="button">Reinscribir</button>
+                        </div>
+                        <div class="table-wrap">
+                            <table class="device-table">
+                                <thead>
+                                    <tr>
+                                        <th>id</th>
+                                        <th>id_user</th>
+                                        <th>alias</th>
+                                        <th>uuid</th>
+                                        <th>code</th>
+                                        <th>estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="deviceRows"></tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <section class="panel device-table-panel">
+                        <div class="panel-head">
+                            <div>
+                                <p class="eyebrow">REGISTRO AUTORIZACIONES</p>
+                                <h3>log_user_devices</h3>
+                            </div>
+                        </div>
+                        <div class="table-wrap">
+                            <table class="device-table">
+                                <thead>
+                                    <tr>
+                                        <th>id</th>
+                                        <th>id_user_device</th>
+                                        <th>accion</th>
+                                        <th>detalle</th>
+                                        <th>estado</th>
+                                        <th>fecha</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="deviceLogRows"></tbody>
+                            </table>
+                        </div>
+                    </section>
+                </div>
+            </section>
+
+            <section id="documentsPanel" class="patient-panel">
+                <div class="patient-layout documents-layout">
+                    <article class="hero-panel document-hero">
+                        <div>
+                            <p class="eyebrow">APP PACIENTE DE AUTORIZACION</p>
+                            <h2>Documentos, consentimientos y acuses</h2>
+                            <p>
+                                El paciente autoriza documentos sensibles, acusa recibo de certificados
+                                y deja trazabilidad para el escritorio web del controlador.
+                            </p>
+                        </div>
+                        <div class="license-card">
+                            <small>Dispositivo vinculado</small>
+                            <strong>UUID PWA</strong>
+                            <span>Base Cordova Android / iPhone</span>
+                        </div>
+                    </article>
+
+                    <section class="panel authorization-panel">
+                        <div class="panel-head">
+                            <div>
+                                <p class="eyebrow">SOLICITUDES PENDIENTES</p>
+                                <h3>Autorizar o acusar recibo</h3>
+                            </div>
+                            <span class="status-pill amber" id="pendingDocumentsCount">0 pendientes</span>
+                        </div>
+                        <div id="documentRequests" class="document-request-list"></div>
+                    </section>
+
+                    <section class="panel receipt-panel">
+                        <div class="panel-head">
+                            <div>
+                                <p class="eyebrow">HISTORIAL</p>
+                                <h3>Documentos procesados</h3>
+                            </div>
+                        </div>
+                        <div id="documentHistory" class="document-history"></div>
+                    </section>
+
+                    <section class="panel audit-panel">
+                        <div class="panel-head">
+                            <div>
+                                <p class="eyebrow">BITACORA DEL PACIENTE</p>
+                                <h3>Eventos enviados a API</h3>
+                            </div>
+                            <button id="clearAuditPatient" class="link-button" type="button">Limpiar demo</button>
+                        </div>
+                        <div id="patientAuditLog" class="audit-list"></div>
+                    </section>
+                </div>
+            </section>
+
+            <section id="restPanel" class="patient-panel">
+                <div class="patient-layout">
+                    <article class="hero-panel">
+                        <div>
+                            <p class="eyebrow">CERTIFICADO DE REPOSO</p>
+                            <h2>Registro seguro del paciente</h2>
+                            <p>
+                                El paciente consiente y envia ubicacion o disponibilidad de videollamada.
+                                El controlador revisa esos eventos desde su escritorio web autenticado.
+                            </p>
+                        </div>
+                        <div class="license-card">
+                            <small>Licencia activa</small>
+                            <strong>LM-2026-00418</strong>
+                            <span>Reposo hasta 25/06/2026</span>
+                        </div>
+                    </article>
+
+                    <section class="panel consent-panel">
+                        <div class="panel-head">
+                            <div>
+                                <p class="eyebrow">CONSENTIMIENTO</p>
+                                <h3>Autorizacion transparente</h3>
+                            </div>
+                            <span class="status-pill amber" id="consentBadge">Pendiente</span>
+                        </div>
+                        <div class="consent-copy">
+                            <p>
+                                Autorizo el uso de mi ubicacion durante controles de reposo, la
+                                verificacion de identidad del dispositivo y llamadas por camara
+                                cuando el controlador lo solicite.
+                            </p>
+                            <label class="check-row">
+                                <input id="consentCheck" type="checkbox">
+                                <span>Acepto el monitoreo visible mientras mi licencia este activa.</span>
+                            </label>
+                        </div>
+                    </section>
+
+                    <section class="panel form-panel">
+                        <div class="panel-head">
+                            <div>
+                                <p class="eyebrow">VINCULACION</p>
+                                <h3>Datos del paciente</h3>
+                            </div>
+                        </div>
+                        <div class="form-grid">
+                            <label>
+                                RUT paciente
+                                <input id="patientRut" value="12.345.678-9" autocomplete="off">
+                            </label>
+                            <label>
+                                Telefono autorizado
+                                <input id="patientPhone" value="+56 9 8123 4567" autocomplete="off">
+                            </label>
+                            <label>
+                                Profesional emisor
+                                <input id="doctorName" value="Dr. Felipe Andrade" autocomplete="off">
+                            </label>
+                            <label>
+                                Lugar principal de reposo
+                                <input id="restAddress" value="Casa, Vina del Mar" autocomplete="off">
+                            </label>
+                        </div>
+                    </section>
+
+                    <section class="patient-actions">
+                        <button id="requestLocation" class="primary" type="button">
+                            Compartir ubicacion ahora
+                        </button>
+                        <button id="startVideo" class="secondary" type="button">
+                            Abrir videollamada de control
+                        </button>
+                    </section>
+
+                    <section class="panel status-panel">
+                        <div class="location-reading">
+                            <span class="reading-icon">GPS</span>
+                            <div>
+                                <strong id="locationStatus">Ubicacion no solicitada</strong>
+                                <small id="locationDetail">El paciente debe aceptar el permiso del navegador.</small>
+                            </div>
+                        </div>
+                        <div class="camera-box">
+                            <video id="cameraPreview" autoplay playsinline muted></video>
+                            <div id="cameraPlaceholder">Camara inactiva</div>
+                        </div>
+                    </section>
+                </div>
+            </section>
+        </section>
+    </section>
+</main>
+
+<script src="js/config.js"></script>
+<script src="js/licencias-reposo-api.js"></script>
+<script src="js/app.js"></script>
+<script src="js/licencias-reposo-sync.js"></script>
+</body>
+</html>
