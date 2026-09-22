@@ -63,6 +63,19 @@ return [
             ]) : [],
         ],
 
+        'medsdi_source' => [
+            'driver' => 'mysql',
+            'host' => env('MEDSDI_DB_HOST', 'medsdi-laravel13-mysql-1'),
+            'port' => env('MEDSDI_DB_PORT', '3306'),
+            'database' => env('MEDSDI_DB_DATABASE', 'medsdi'),
+            'username' => env('MEDSDI_DB_USERNAME', 'app_user'),
+            'password' => env('MEDSDI_DB_PASSWORD', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'strict' => true,
+        ],
+
         'pgsql' => [
             'driver' => 'pgsql',
             'url' => env('DATABASE_URL'),

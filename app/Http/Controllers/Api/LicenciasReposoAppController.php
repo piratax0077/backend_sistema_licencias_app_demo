@@ -52,7 +52,7 @@ class LicenciasReposoAppController extends Controller
 
         $autorizaciones = LicenciaPacienteAutorizacion::with(['expediente.paciente', 'expediente.profesional'])
             ->where('estado', 'pendiente')
-            ->whereHas('expediente.paciente', function ($query) use ($data) {
+            ->whereHas('expediente.paciente', function ($query) use ($pacienteRutClean) {
                 $query->whereRaw("UPPER(REPLACE(REPLACE(REPLACE(rut, '.', ''), '-', ''), ' ', '')) = ?", [$pacienteRutClean]);
             })
             ->orderByDesc('id')
@@ -75,12 +75,22 @@ class LicenciasReposoAppController extends Controller
     public function responder(Request $request, string $token): JsonResponse
     {
         $data = $request->validate([
-            'aprueba' => 'required|boolean',
+            'aprueba' => 'nullable|required_without:decisiones|boolean',
+            'decisiones' => 'nullable|array',
+            'decisiones.antecedentes' => 'required_with:decisiones|boolean',
+            'decisiones.ubicacion' => 'required_with:decisiones|boolean',
+            'decisiones.camara' => 'required_with:decisiones|boolean',
             'observacion' => 'nullable|string|max:1000',
         ]);
 
         $autorizacion = LicenciaPacienteAutorizacion::where('token', $token)->firstOrFail();
-        $expediente = $this->workflow->autorizarPaciente($autorizacion, (bool) $data['aprueba'], $data['observacion'] ?? null);
+        $expediente = ($autorizacion->canal === 'fiscalizacion_reposo' || isset($data['decisiones']))
+            ? $this->workflow->responderFiscalizacion($autorizacion, $data['decisiones'] ?? [
+                'antecedentes' => (bool) ($data['aprueba'] ?? false),
+                'ubicacion' => (bool) ($data['aprueba'] ?? false),
+                'camara' => (bool) ($data['aprueba'] ?? false),
+            ], $data['observacion'] ?? null)
+            : $this->workflow->autorizarPaciente($autorizacion, (bool) $data['aprueba'], $data['observacion'] ?? null);
 
         return response()->json([
             'ok' => true,

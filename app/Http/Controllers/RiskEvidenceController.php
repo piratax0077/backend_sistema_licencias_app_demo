@@ -1,0 +1,28 @@
+<?php
+namespace App\Http\Controllers;
+use App\Models\DemoLicenciaCase;
+use App\Services\AutoReviewService;
+use App\Services\RiskControlService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+class RiskEvidenceController extends Controller {
+ public function operator(Request $r){abort_unless(in_array($r->session()->get('demo_role','admin'),['admin','profesional','empleador','contraloria','auditor','pagador']),403);$v=$r->validate(['operator'=>'required|string|regex:/^[a-zA-Z0-9_-]{3,40}$/']);$r->session()->put('demo_operator_id',$v['operator']);return back()->with('ok','Identidad de operador demo seleccionada. No equivale a autenticación real.');}
+ public function save(Request $r,DemoLicenciaCase $case,AutoReviewService $rules){
+  $role=$r->session()->get('demo_role','admin');abort_unless(in_array($role,['admin','profesional','empleador','contraloria','pagador']),403);
+  $v=$r->validate(['version'=>'required|integer','contract_start'=>'nullable|date_format:Y-m-d','affiliation_start'=>'nullable|date_format:Y-m-d','employer_id'=>'nullable|string|max:40','contract_net'=>'nullable|numeric|min:1|max:100000000','previous_net'=>'nullable|numeric|min:1|max:100000000','payroll_gross'=>'nullable|numeric|min:1|max:100000000','contribution_gross'=>'nullable|numeric|min:1|max:100000000','recipient_id'=>'nullable|string|max:40','recipient_verified'=>'nullable|boolean','leave_relation'=>'required|in:normal,continuacion,reemplazo,varios_empleadores','related_case_id'=>'nullable|integer|exists:demo_licencia_cases,id','relation_explanation'=>'nullable|string|max:1000','explanation'=>'required|string|min:10|max:1500']);
+  return DB::transaction(function()use($r,$case,$v,$role,$rules){$case=DemoLicenciaCase::whereKey($case->id)->lockForUpdate()->firstOrFail();if($case->version!=$v['version']||in_array($case->status,['pagada','cancelada']))throw ValidationException::withMessages(['version'=>'El expediente cambió o está cerrado.']);
+   if($v['leave_relation']!=='normal'){$other=DemoLicenciaCase::find($v['related_case_id']??0);if(!$other||$other->id===$case->id||$other->data['rut']!==$case->data['rut']||mb_strlen($v['relation_explanation']??'')<10)throw ValidationException::withMessages(['relacion'=>'La excepción exige otra licencia del mismo paciente y una explicación.']);}
+   $d=$case->data;$old=$d['risk_evidence']??[];$e=$old;
+   if(in_array($role,['admin','contraloria','empleador']))foreach(['contract_start','affiliation_start','employer_id','contract_net','previous_net','payroll_gross','contribution_gross'] as $key)$e[$key]=$v[$key]??null;
+   if(in_array($role,['admin','contraloria','pagador'])){$e['recipient_id']=$v['recipient_id']??null;$e['recipient_verified']=$r->boolean('recipient_verified');if(($old['recipient_id']??null)!==($e['recipient_id']??null))$e['recipient_verified']=false;}
+   $d['risk_evidence']=$e;if(in_array($role,['admin','contraloria','profesional'])){$d['leave_relation']=$v['leave_relation'];$d['related_case_id']=$v['related_case_id']??null;$d['relation_explanation']=$v['relation_explanation']??'';}
+   $d['risk_explanations'][]=['role'=>$role,'text'=>$v['explanation'],'at'=>now()->toIso8601String()];
+   $d['events'][]=['at'=>now()->toIso8601String(),'role'=>$role,'source'=>'Portal web','label'=>'Antecedentes de controles cruzados actualizados','note'=>$v['explanation']];
+   $case->update(['data'=>$d,'version'=>$case->version+1]);$this->audit($case,$role,'actualizar_evidencia',$v['explanation']);$rules->refresh($case);return back()->with('ok','Evidencia registrada y controles reevaluados. Si cambió el destinatario, requiere una nueva confirmación.');
+  });
+ }
+ public function attest(Request $r,DemoLicenciaCase $case,AutoReviewService $rules){abort_unless($r->session()->get('demo_role')==='contraloria',403);$v=$r->validate(['version'=>'required|integer','note'=>'required|string|min:20|max:1500']);return DB::transaction(function()use($case,$v,$rules){$case=DemoLicenciaCase::whereKey($case->id)->lockForUpdate()->firstOrFail();if($case->version!=$v['version']||in_array($case->status,['pagada','cancelada']))throw ValidationException::withMessages(['version'=>'Expediente modificado o cerrado.']);$d=$case->data;$d['documents_digest']=RiskControlService::digest($d);$d['events'][]=['at'=>now()->toIso8601String(),'role'=>'contraloria','source'=>'Portal web','label'=>'Antecedentes revalidados por Contraloría','note'=>$v['note']];$case->update(['data'=>$d,'version'=>$case->version+1]);$this->audit($case,'contraloria','revalidar_antecedentes',$v['note']);$rules->refresh($case);return back()->with('ok','Revalidación fundamentada registrada.');});}
+ public function explain(Request $r,DemoLicenciaCase $case){abort_unless($r->session()->get('demo_role')==='paciente',403);$v=$r->validate(['note'=>'required|string|min:10|max:1500']);return DB::transaction(function()use($case,$v){$case=DemoLicenciaCase::whereKey($case->id)->lockForUpdate()->firstOrFail();$d=$case->data;$d['risk_explanations'][]=['role'=>'paciente','text'=>$v['note'],'at'=>now()->toIso8601String()];$case->update(['data'=>$d,'version'=>$case->version+1]);$this->audit($case,'paciente','explicar_control',$v['note']);return back()->with('ok','Explicación enviada para revisión. No se ha rechazado automáticamente la licencia.');});}
+ private function audit($case,$role,$action,$note){DB::table('demo_workflow_audits')->insert(['folio'=>$case->folio,'action'=>$action,'role'=>$role,'channel'=>'portal','result'=>'aceptado','status'=>$case->status,'reason'=>$note,'created_at'=>now(),'updated_at'=>now()]);}
+}

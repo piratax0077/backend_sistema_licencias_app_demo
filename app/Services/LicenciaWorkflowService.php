@@ -30,6 +30,54 @@ class LicenciaWorkflowService
         ]);
     }
 
+    public function crearSolicitudFiscalizacion(LicenciaExpediente $expediente): LicenciaPacienteAutorizacion
+    {
+        $token = 'FIS-' . Str::upper(Str::random(48));
+        $payload = $this->payloadApp($expediente, $token);
+        $payload['alcances'] = [
+            'antecedentes' => true,
+            'ubicacion' => true,
+            'camara' => true,
+        ];
+        $payload['mensaje'] = 'Fiscalización solicita decisiones independientes para antecedentes, ubicación y cámara.';
+
+        return $expediente->autorizacionPaciente()->create([
+            'token' => $token,
+            'canal' => 'fiscalizacion_reposo',
+            'estado' => 'pendiente',
+            'solicitada_at' => now(),
+            'payload_app' => $payload,
+        ]);
+    }
+
+    public function responderFiscalizacion(LicenciaPacienteAutorizacion $autorizacion, array $decisiones, ?string $observacion = null): LicenciaExpediente
+    {
+        return DB::transaction(function () use ($autorizacion, $decisiones, $observacion) {
+            $expediente = $autorizacion->expediente()->lockForUpdate()->firstOrFail();
+            $normalizadas = [
+                'antecedentes' => (bool) ($decisiones['antecedentes'] ?? false),
+                'ubicacion' => (bool) ($decisiones['ubicacion'] ?? false),
+                'camara' => (bool) ($decisiones['camara'] ?? false),
+            ];
+            $aprobadas = count(array_filter($normalizadas));
+            $estado = $aprobadas === 3 ? 'aprobada' : ($aprobadas === 0 ? 'rechazada' : 'parcial');
+            $payload = $autorizacion->payload_app ?: [];
+            $payload['decisiones'] = $normalizadas;
+            $payload['respondida_at'] = now()->toISOString();
+
+            $autorizacion->update([
+                'estado' => $estado,
+                'respondida_at' => now(),
+                'respuesta_observacion' => $observacion,
+                'payload_app' => $payload,
+            ]);
+            $expediente->update(['estado' => 'fiscalizacion_' . $estado]);
+            $this->evento($expediente, 'paciente', 'paciente_responde_fiscalizacion', $observacion, ['decisiones' => $normalizadas]);
+
+            return $expediente->fresh(['paciente', 'profesional', 'autorizacionPaciente']);
+        });
+    }
+
     public function crearDocumentosBase(LicenciaExpediente $expediente, ?LicenciaEmpleador $empleador = null): void
     {
         $docs = [

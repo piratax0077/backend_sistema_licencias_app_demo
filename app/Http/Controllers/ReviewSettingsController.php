@@ -1,0 +1,14 @@
+<?php
+namespace App\Http\Controllers;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use App\Models\DemoLicenciaCase;
+use App\Services\AutoReviewService;
+class ReviewSettingsController extends Controller {
+ public function save(Request $r,AutoReviewService $rules){abort_unless($r->session()->get('demo_role')==='contraloria',403);
+  $extra=[];foreach(\App\Services\RiskControlService::NUMBERS as $key=>$meta)$extra[$key]='required|numeric|min:'.$meta[2].'|max:'.$meta[3];$extra['risk_rules']='nullable|array';foreach(\App\Services\RiskControlService::RULES as $key=>$label)$extra['risk_rules.'.$key]='nullable|boolean';
+  $p=$r->validate($extra+['radius_km'=>'required|numeric|min:0.1|max:100','review_from'=>'required|integer|min:0|max:1000','max_days'=>'required|integer|min:1|max:365','min_minutes'=>'required|integer|min:0|max:240','max_accuracy'=>'required|integer|min:1|max:10000','check_origin'=>'nullable|boolean','check_location'=>'nullable|boolean']);$p['check_origin']=$r->boolean('check_origin');$p['check_location']=$r->boolean('check_location');$p['risk_rules']=[];foreach(\App\Services\RiskControlService::RULES as $key=>$label)$p['risk_rules'][$key]=$r->boolean('risk_rules.'.$key);
+  DB::transaction(function()use($p,$rules){DB::table('demo_review_settings')->where('id',1)->lockForUpdate()->first();DB::table('demo_review_settings')->where('id',1)->update(['data'=>json_encode($p),'updated_at'=>now()]);DB::table('demo_workflow_audits')->insert(['folio'=>'CONFIGURACION','action'=>'ajustar_parametros','role'=>'contraloria','channel'=>'portal','result'=>'aceptado','status'=>'configurado','reason'=>json_encode($p),'created_at'=>now(),'updated_at'=>now()]);foreach(DemoLicenciaCase::whereNotIn('status',['borrador','paciente','cancelada','rechazada','pagada'])->get() as $case)$rules->refresh($case);});return redirect('/')->with('ok','Parámetros guardados y expedientes activos reevaluados.');
+ }
+ public function reference(Request $r,DemoLicenciaCase $case,AutoReviewService $rules){abort_unless($r->session()->get('demo_role')==='contraloria',403);$v=$r->validate(['latitude'=>'required|numeric|between:-90,90','longitude'=>'required|numeric|between:-180,180']);DB::transaction(function()use($case,$v,$rules){$case=DemoLicenciaCase::whereKey($case->id)->lockForUpdate()->firstOrFail();$d=$case->data;$d['rest_coordinates']=$v;$case->update(['data'=>$d,'version'=>$case->version+1]);DB::table('demo_workflow_audits')->insert(['folio'=>$case->folio,'action'=>'fijar_referencia_reposo','role'=>'contraloria','channel'=>'portal','result'=>'aceptado','status'=>$case->status,'reason'=>'Referencia del domicilio actualizada por Contraloría','created_at'=>now(),'updated_at'=>now()]);$rules->refresh($case);});return back()->with('ok','Referencia de reposo guardada y radio reevaluado.');}
+}

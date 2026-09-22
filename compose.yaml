@@ -1,0 +1,62 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: licencias-app
+    restart: unless-stopped
+    ports:
+      - "8024:8024"
+    volumes:
+      - .:/var/www/html
+      - ../licencias_app_demo/app-paciente:/var/www/app-paciente:ro
+      - licencias_vendor:/var/www/html/vendor
+    depends_on:
+      mysql:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    networks:
+      - licencias
+      - medsdi_source
+
+  mysql:
+    image: mysql:8.4
+    container_name: licencias-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: licencias
+      MYSQL_USER: licencias
+      MYSQL_PASSWORD: licencias
+      MYSQL_ROOT_PASSWORD: root_licencias
+    ports:
+      - "3308:3306"
+    volumes:
+      - licencias_mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot_licencias"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - licencias
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: licencias-mailpit
+    restart: unless-stopped
+    ports:
+      - "8026:8025"
+    networks:
+      - licencias
+
+volumes:
+  licencias_vendor:
+  licencias_mysql:
+
+networks:
+  licencias:
+    driver: bridge
+  medsdi_source:
+    external: true
+    name: medsdi-laravel13_sail

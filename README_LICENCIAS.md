@@ -2,6 +2,19 @@
 
 Proyecto Laravel 13 con PHP 8.4 para emitir licencias medicas, solicitar autorizacion al paciente, notificar empleadores y conectar la app Licencias Reposo.
 
+## Docker
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+docker compose exec app php artisan migrate --seed
+```
+
+- Aplicación: `http://localhost:8024`
+- Formulario: `http://localhost:8024/licencia`
+- Licencias del empleador: `http://localhost:8024/empleador/licencias`
+- Mailpit: `http://localhost:8026`
+
 ## Ver formulario
 
 ```powershell
@@ -46,10 +59,41 @@ http://127.0.0.1:8024/api/licencias-reposo
 
 ## Base de datos
 
-El proyecto queda configurado con SQLite local:
+En Docker se utiliza MySQL 8.4 mediante el servicio `mysql`. Sus datos se
+conservan en el volumen `licencias_mysql`, aunque los contenedores se reinicien.
 
-```text
-database/database.sqlite
+Las migraciones crean las tablas del flujo de licencias SDI.
+
+## App de paciente integrada
+
+Con el repositorio hermano `licencias_app_demo` clonado junto a este proyecto,
+Docker monta `app-paciente` en modo solo lectura y Laravel sirve la misma fuente
+usada por Cordova:
+
+- Portal demo: `http://localhost:8024/`
+- App del paciente: `http://localhost:8024/app`
+- Fiscalización: `http://localhost:8024/fiscalizacion`
+
+Desde un expediente del portal, el botón **Abrir app de control** genera un
+enlace firmado exclusivo para ese caso. Las acciones se sincronizan mediante
+`/api/demo-app/expedientes/{id}`.
+
+## Catálogo inicial desde Med-SDI
+
+El formulario de atención puede sincronizar pacientes, profesionales activos y
+sus lugares de atención desde la base MySQL de `medsdi-laravel13`:
+
+```bash
+docker compose exec app php artisan medsdi:import-catalog --patients=20 --professionals=20
 ```
 
-Las migraciones ya crean las tablas del flujo de licencias SDI.
+La importación conserva los IDs externos y es idempotente. Es solo una carga
+inicial: las búsquedas por RUT de la pantalla consultan en línea el API del
+backend Laravel 13 de Med-SDI, mediante las rutas protegidas:
+
+- `GET /api/integraciones/licencias/catalogo/pacientes/rut/{rut}`
+- `GET /api/integraciones/licencias/catalogo/profesionales/rut/{rut}`
+
+Licencias conserva localmente únicamente la referencia del resultado elegido.
+La respuesta del profesional incluye sus lugares activos y el selector muestra
+solamente esos registros de `profesionales_lugares_atencion`.
