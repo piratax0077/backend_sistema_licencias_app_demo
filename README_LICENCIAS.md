@@ -78,6 +78,37 @@ Desde un expediente del portal, el botón **Abrir app de control** genera un
 enlace firmado exclusivo para ese caso. Las acciones se sincronizan mediante
 `/api/demo-app/expedientes/{id}`.
 
+### Login independiente de la app
+
+La app usa usuarios de la tabla `users` de este backend, nunca usuarios de
+Med-SDI. Cada cuenta debe tener `rol=paciente`, estar activa y tener un RUT.
+La app obtiene un token Sanctum y sólo consulta las licencias demo asociadas a
+ese RUT mediante `/api/patient-app`.
+
+Si la app se publica en otro dominio, configura el origen y la URL pública:
+
+```dotenv
+PATIENT_APP_ALLOWED_ORIGINS=https://app-licencias.example.cl
+```
+
+```js
+window.LICENCIAS_APP_CONFIG = Object.freeze({
+    apiBaseUrl: "https://api-licencias.example.cl/api",
+});
+```
+
+Las rutas `/api/demo-app` firmadas se conservan temporalmente por
+compatibilidad; el flujo normal utiliza login.
+
+Para crear o actualizar una cuenta paciente local:
+
+```bash
+docker compose exec app php artisan patient-app:user paciente@example.cl 12.345.678-5 --name="Paciente Demo"
+```
+
+La contraseña se solicita de forma oculta. El RUT debe coincidir con el RUT
+guardado en las licencias que verá esa cuenta.
+
 ## Catálogo inicial desde Med-SDI
 
 El formulario de atención puede sincronizar pacientes, profesionales activos y

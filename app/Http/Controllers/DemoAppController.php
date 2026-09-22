@@ -3,6 +3,7 @@ namespace App\Http\Controllers;
 
 use App\Models\DemoLicenciaCase;
 use App\Services\DemoLicenciaService;
+use App\Support\Rut;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -20,6 +21,37 @@ class DemoAppController extends Controller
     {
         abort_unless(hash_equals(self::credential($case), (string) $request->bearerToken()), 403, 'Vinculación no válida. Abre la app desde el expediente.');
     }
+    private function authorizePatient(Request $request, DemoLicenciaCase $case): void
+    {
+        abort_unless(
+            $request->user()?->tokenCan('patient-app')
+            && $request->user()->rol === 'paciente'
+            && Rut::clean($request->user()->rut) === Rut::clean($case->data['rut'] ?? null),
+            403,
+            'No tienes acceso a esta licencia.'
+        );
+    }
+    public function patientIndex(Request $request)
+    {
+        abort_unless($request->user()?->tokenCan('patient-app'), 403);
+        $rut = Rut::clean($request->user()->rut);
+        $cases = DemoLicenciaCase::latest('id')->get()
+            ->filter(fn (DemoLicenciaCase $case) => Rut::clean($case->data['rut'] ?? null) === $rut)
+            ->map(fn (DemoLicenciaCase $case) => $this->payload($case))
+            ->values();
+
+        return response()->json(['data' => $cases])->header('Cache-Control', 'no-store');
+    }
+    public function patientShow(Request $request, DemoLicenciaCase $case)
+    {
+        $this->authorizePatient($request, $case);
+        return response()->json(['data'=>$this->payload($case)])->header('Cache-Control','no-store');
+    }
+    public function patientAction(Request $request, DemoLicenciaCase $case, DemoLicenciaService $flow)
+    {
+        $this->authorizePatient($request, $case);
+        return $this->performAction($request, $case, $flow);
+    }
     public function show(Request $request, DemoLicenciaCase $case)
     {
         $this->authorizeCase($request, $case);
@@ -28,6 +60,10 @@ class DemoAppController extends Controller
     public function action(Request $request, DemoLicenciaCase $case, DemoLicenciaService $flow)
     {
         $this->authorizeCase($request, $case);
+        return $this->performAction($request, $case, $flow);
+    }
+    private function performAction(Request $request, DemoLicenciaCase $case, DemoLicenciaService $flow)
+    {
         $input=$request->validate([
             'action'=>['required',Rule::in(['autorizar','no_autorizar','ficha','control','apelar','responder_control','explicar_revision'])],
             'control_request_id'=>'nullable|uuid','decision'=>'nullable|in:aprobar,rechazar','version'=>'required|integer|min:1', 'note'=>'nullable|string|max:1000',
@@ -57,7 +93,7 @@ class DemoAppController extends Controller
     public function asset(?string $asset = null)
     {
         $asset=$asset ?: 'index.html';
-        $allowed=['index.html'=>'text/html; charset=utf-8','js/integracion.js'=>'application/javascript','css/integracion.css'=>'text/css'];
+        $allowed=['index.html'=>'text/html; charset=utf-8','js/config.js'=>'application/javascript','js/integracion.js'=>'application/javascript','css/integracion.css'=>'text/css'];
         abort_unless(isset($allowed[$asset]),404);
         $path=base_path('../app-paciente/www/'.$asset);
         abort_unless(is_file($path),404);
